@@ -72,10 +72,6 @@ def split_text_into_chunks(text: str, chunk_size: int = 1000) -> List[str]:
 async def root():
     return {"message": "Welcome to Gutenberg API"}
 
-# ✅ Place `handler = Mangum(app)` OUTSIDE all functions
-handler = Mangum(app)
-
-# ✅ Ensure `if __name__ == "__main__"` is properly placed
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
 
