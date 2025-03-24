@@ -58,7 +58,7 @@ class LLMHandler:
             response = await asyncio.wait_for(
                 self.llm.ainvoke(messages, temperature=temperature), timeout=API_TIMEOUT
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("Groq request timed out after %ss", API_TIMEOUT)
             return "I'm sorry, but the request to the AI service timed out. Please try again later."
         except Exception:

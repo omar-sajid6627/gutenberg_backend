@@ -29,7 +29,7 @@ PASSAGE = (
 class TestGrounding:
     def test_every_quoted_line_appears_in_the_source(self):
         answer = answer_from_context("Why does the narrator go to sea?", PASSAGE)
-        quoted = [l[2:].strip() for l in answer.splitlines() if l.startswith("> ")]
+        quoted = [ln[2:].strip() for ln in answer.splitlines() if ln.startswith("> ")]
         assert quoted, "nothing was quoted"
         for line in quoted:
             assert line in PASSAGE, f"invented text: {line!r}"

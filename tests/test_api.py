@@ -76,7 +76,9 @@ class TestAsk:
         client.post("/books/99999/ask", json={"query": "storm?"})
         assert (data_dir / "chunks" / "book_99999_chunks.json").exists()
 
-    @pytest.mark.parametrize("payload", [{"query": ""}, {"query": "x" * 1001}, {"query": "ok", "temperature": 5}])
+    @pytest.mark.parametrize(
+        "payload", [{"query": ""}, {"query": "x" * 1001}, {"query": "ok", "temperature": 5}]
+    )
     def test_invalid_requests_are_rejected(self, client, payload):
         assert client.post("/books/1/ask", json=payload).status_code == 422
 

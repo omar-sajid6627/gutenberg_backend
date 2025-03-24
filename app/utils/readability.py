@@ -58,7 +58,6 @@ def count_syllables(word: str) -> int:
     return max(count, 1)
 
 
-
 def _first_n_words(text: str, n: int) -> str:
     """The prefix of `text` containing its first `n` words, boundaries intact."""
     count = 0
@@ -90,14 +89,21 @@ class Readability:
         }
 
 
+# Lower bound of each conventional Flesch band, easiest first.
+BANDS = (
+    (90, "Very easy"),
+    (80, "Easy"),
+    (70, "Fairly easy"),
+    (60, "Standard"),
+    (50, "Fairly difficult"),
+    (30, "Difficult"),
+)
+
+
 def label_for(score: float) -> str:
-    """The conventional Flesch bands."""
-    if score >= 90: return "Very easy"
-    if score >= 80: return "Easy"
-    if score >= 70: return "Fairly easy"
-    if score >= 60: return "Standard"
-    if score >= 50: return "Fairly difficult"
-    if score >= 30: return "Difficult"
+    for floor, label in BANDS:
+        if score >= floor:
+            return label
     return "Very difficult"
 
 

@@ -20,6 +20,7 @@ appears verbatim in the passage it was given.
 
 from __future__ import annotations
 
+import os
 import re
 
 STOPWORDS = {
@@ -144,8 +145,6 @@ class LocalLLMHandler:
 
 def usable_api_key(name: str = "GROQ_API_KEY") -> str | None:
     """The key, or None when absent or an obvious placeholder."""
-    import os
-
     value = (os.getenv(name) or "").strip()
     if not value:
         return None

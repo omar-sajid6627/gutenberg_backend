@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from pydantic import BaseModel
-from typing import List, Optional
+
 
 class Book(BaseModel):
     id: str
@@ -10,13 +12,7 @@ class Book(BaseModel):
     ebook_no: str
     release_date: str
     summary: str
-    cover_url: Optional[str] = None
+    cover_url: str | None = None
     downloads: int = 0
-    reading_ease_score: Optional[float] = None
-    content: Optional[str] = None
-
-class BookList(BaseModel):
-    books: List[Book]
-    total: int
-    page: int
-    per_page: int 
+    reading_ease_score: float | None = None
+    content: str | None = None
