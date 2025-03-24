@@ -19,10 +19,11 @@ import pytest
 from app.utils import text_chunking as tc
 
 
-@pytest.fixture(autouse=True)
-def isolated_store(tmp_path, monkeypatch):
-    monkeypatch.setattr(tc, "CHUNKS_DIR", tmp_path)
-    return tmp_path
+@pytest.fixture
+def isolated_store(data_dir):
+    store = data_dir / "chunks"
+    store.mkdir()
+    return store
 
 
 def sentences(n: int) -> str:
@@ -31,20 +32,20 @@ def sentences(n: int) -> str:
 
 class TestStore:
     def test_round_trip(self):
-        tc.save_chunks("42", ["first passage.", "second passage."])
-        assert tc.load_chunks("42") == ["first passage.", "second passage."]
+        tc.save_chunks(42, ["first passage.", "second passage."])
+        assert tc.load_chunks(42) == ["first passage.", "second passage."]
 
     def test_the_file_is_plain_json(self, isolated_store):
-        path = tc.save_chunks("42", ["only passage."])
+        path = tc.save_chunks(42, ["only passage."])
         assert json.loads(path.read_text())["chunks"] == ["only passage."]
 
     def test_missing_cache_is_none(self):
-        assert tc.load_chunks("7") is None
+        assert tc.load_chunks(7) is None
 
     @pytest.mark.parametrize("payload", ["not json", '{"chunks": [1, 2]}', "[]", '{"chunks": "text"}'])
     def test_malformed_cache_is_ignored(self, isolated_store, payload):
         (isolated_store / "book_9_chunks.json").write_text(payload)
-        assert tc.load_chunks("9") is None
+        assert tc.load_chunks(9) is None
 
     def test_a_planted_pickle_is_never_loaded(self, isolated_store, tmp_path_factory):
         sentinel = tmp_path_factory.mktemp("sentinel") / "executed"
@@ -56,8 +57,8 @@ class TestStore:
         for name in ("book_5_embeddings.pkl", "book_5_chunks.json"):
             (isolated_store / name).write_bytes(pickle.dumps(Payload()))
 
-        assert tc.load_chunks("5") is None
-        assert tc.get_book_chunks("5", sentences(3))
+        assert tc.load_chunks(5) is None
+        assert tc.get_book_chunks(5, sentences(3))
         assert not sentinel.exists()
 
     def test_the_module_does_not_import_pickle(self):
@@ -91,6 +92,6 @@ class TestChunking:
         assert chunks[-1].endswith("Sentence number 2999 has six words.")
 
     def test_get_book_chunks_caches_its_result(self, isolated_store):
-        first = tc.get_book_chunks("3", sentences(10))
+        first = tc.get_book_chunks(3, sentences(10))
         assert (isolated_store / "book_3_chunks.json").exists()
-        assert tc.get_book_chunks("3", "completely different text.") == first
+        assert tc.get_book_chunks(3, "completely different text.") == first

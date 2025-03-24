@@ -21,11 +21,12 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from app.config import DATA_DIR, book_file
 from app.utils.sentences import split_sentences
 
 logger = logging.getLogger(__name__)
 
-SENTIMENT_DIR = Path("data/sentiment")
+SENTIMENT_DIR = DATA_DIR / "sentiment"
 SENTIMENT_CACHE_EXPIRATION = 12 * 60 * 60
 
 # Full novels run to millions of characters; VADER and the lemmatiser are
@@ -37,7 +38,7 @@ TOP_WORDS = 150
 
 NON_LETTERS = re.compile(r"[^a-z\s]")
 
-_sentiment_cache: dict[str, dict[str, Any]] = {}
+_sentiment_cache: dict[int, dict[str, Any]] = {}
 
 
 class MissingNLTKData(RuntimeError):
@@ -78,11 +79,11 @@ def _sample(text: str, limit: int) -> str:
     return "\n\n".join((text[:part], text[middle : middle + part], text[-part:]))
 
 
-def _cache_file(book_id: str) -> Path:
-    return SENTIMENT_DIR / f"book_{book_id}_sentiment.json"
+def _cache_file(book_id: int) -> Path:
+    return book_file(SENTIMENT_DIR, book_id, "sentiment.json")
 
 
-def get_cached_sentiment(book_id: str) -> dict[str, Any] | None:
+def get_cached_sentiment(book_id: int) -> dict[str, Any] | None:
     entry = _sentiment_cache.get(book_id)
     if entry is None:
         cache_file = _cache_file(book_id)
@@ -103,7 +104,7 @@ def get_cached_sentiment(book_id: str) -> dict[str, Any] | None:
     return result
 
 
-def save_sentiment_to_cache(book_id: str, result: dict[str, Any]) -> None:
+def save_sentiment_to_cache(book_id: int, result: dict[str, Any]) -> None:
     entry = {"result": result, "timestamp": time.time()}
     _sentiment_cache[book_id] = entry
     try:
@@ -144,7 +145,7 @@ def overall_label(compound: float) -> str:
     return "positive"
 
 
-def analyze_book_sentiment(content: str, book_id: str) -> dict[str, Any]:
+def analyze_book_sentiment(content: str, book_id: int) -> dict[str, Any]:
     cached = get_cached_sentiment(book_id)
     if cached:
         return cached

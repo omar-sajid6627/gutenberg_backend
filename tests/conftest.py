@@ -1,6 +1,7 @@
 """
 Shared fixtures. Nothing in the suite reaches gutenberg.org: every test gets
-a stand-in HTTP session that serves only the pages a test registers.
+a stand-in HTTP session that serves only the pages a test registers, and its
+own empty data directory.
 """
 
 from __future__ import annotations
@@ -8,6 +9,7 @@ from __future__ import annotations
 import pytest
 
 from app import scraper
+from app.utils import content_cache, sentiment_analysis, text_chunking
 
 SAMPLE_TEXT = (
     "The Project Gutenberg eBook of The Lighthouse Keeper\n\n"
@@ -88,3 +90,13 @@ def gutenberg(monkeypatch) -> FakeGutenberg:
     fake = FakeGutenberg()
     monkeypatch.setattr(scraper, "SESSION", fake)
     return fake
+
+
+@pytest.fixture(autouse=True)
+def data_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr(content_cache, "CACHE_DIR", tmp_path / "cache")
+    monkeypatch.setattr(sentiment_analysis, "SENTIMENT_DIR", tmp_path / "sentiment")
+    monkeypatch.setattr(text_chunking, "CHUNKS_DIR", tmp_path / "chunks")
+    monkeypatch.setattr(content_cache, "_memory_cache", {})
+    monkeypatch.setattr(sentiment_analysis, "_sentiment_cache", {})
+    return tmp_path

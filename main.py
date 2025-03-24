@@ -1,6 +1,6 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Path
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List, Optional, Dict, Any
+from typing import Annotated, List, Optional, Dict, Any
 from app.models import Book, BookList
 from app.scraper import fetch_book
 from app.utils import get_book_content
@@ -41,6 +41,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Gutenberg ebook numbers are positive integers. Typing the path parameter as
+# one means FastAPI rejects anything else with 422 before it reaches a cache
+# filename built from it.
+BookId = Annotated[int, Path(gt=0, le=10_000_000)]
+
 class TTSRequest(BaseModel):
     text: str
     chunk_index: Optional[int] = 0
@@ -48,7 +53,8 @@ class TTSRequest(BaseModel):
 
 class QueryRequest(BaseModel):
     query: str
-    book_id: str
+    # Ignored; the book is the one in the URL. Kept so existing clients validate.
+    book_id: Optional[str] = None
     temperature: Optional[float] = 0
 
 def split_text_into_chunks(text: str, chunk_size: int = 1000) -> List[str]:
@@ -79,7 +85,7 @@ async def root():
     return {"message": "Welcome to Gutenberg API"}
 
 @app.get("/books/{book_id}", response_model=Book)
-async def get_book(book_id: str):
+async def get_book(book_id: BookId):
     # Fetch directly from Gutenberg without content
     book = fetch_book(book_id)
     if not book:
@@ -88,7 +94,7 @@ async def get_book(book_id: str):
 
 
 @app.get("/books/{book_id}/readability")
-async def get_readability(book_id: str):
+async def get_readability(book_id: BookId):
     """
     Flesch Reading Ease, computed from the book's text.
 
@@ -121,7 +127,7 @@ async def get_readability(book_id: str):
     return {"book_id": book_id, **result.as_dict()}
 
 @app.get("/books/{book_id}/content")
-async def get_book_content_endpoint(book_id: str):
+async def get_book_content_endpoint(book_id: BookId):
     print(f"\n=== Retrieving content for book {book_id} ===")
     
     # Get content from cache or fetch if needed
@@ -195,7 +201,7 @@ async def get_text_chunks(request: TTSRequest):
 
 
 @app.post("/books/{book_id}/ask")
-async def ask_about_book(book_id: str, request: QueryRequest):
+async def ask_about_book(book_id: BookId, request: QueryRequest):
     """
     Answer questions about a specific book using the LLM.
     """
@@ -262,7 +268,7 @@ async def ask_about_book(book_id: str, request: QueryRequest):
 
 @app.get("/books/{book_id}/sentiment", response_model=Dict[str, Any])
 @app.post("/books/{book_id}/sentiment", response_model=Dict[str, Any])
-async def analyze_book_sentiment_endpoint(book_id: str, background_tasks: BackgroundTasks):
+async def analyze_book_sentiment_endpoint(book_id: BookId, background_tasks: BackgroundTasks):
     """
     Get sentiment analysis for a book.
     Supports both GET and POST methods for flexibility.
@@ -343,7 +349,7 @@ async def analyze_book_sentiment_endpoint(book_id: str, background_tasks: Backgr
         raise HTTPException(status_code=500, detail=f"Failed to analyze sentiment: {str(e)}")
 
 @app.delete("/cache/{book_id}")
-async def clear_book_cache(book_id: str):
+async def clear_book_cache(book_id: BookId):
     """
     Clear cache for a specific book.
     """

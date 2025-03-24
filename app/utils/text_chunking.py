@@ -17,11 +17,12 @@ import logging
 import os
 from pathlib import Path
 
+from app.config import DATA_DIR, book_file
 from app.utils.sentences import split_sentences
 
 logger = logging.getLogger(__name__)
 
-CHUNKS_DIR = Path("data/chunks")
+CHUNKS_DIR = DATA_DIR / "chunks"
 MAX_CHUNKS = 50
 # Beyond this, chunking a whole novel only to sample 50 passages is waste.
 MAX_TEXT_CHARS = 450_000
@@ -76,11 +77,11 @@ def get_chunk_info(chunks: list[str]) -> dict:
     }
 
 
-def _chunks_file(book_id: str) -> Path:
-    return CHUNKS_DIR / f"book_{book_id}_chunks.json"
+def _chunks_file(book_id: int) -> Path:
+    return book_file(CHUNKS_DIR, book_id, "chunks.json")
 
 
-def save_chunks(book_id: str, chunks: list[str]) -> Path:
+def save_chunks(book_id: int, chunks: list[str]) -> Path:
     CHUNKS_DIR.mkdir(parents=True, exist_ok=True)
     path = _chunks_file(book_id)
     tmp = path.with_suffix(".json.tmp")
@@ -89,7 +90,7 @@ def save_chunks(book_id: str, chunks: list[str]) -> Path:
     return path
 
 
-def load_chunks(book_id: str) -> list[str] | None:
+def load_chunks(book_id: int) -> list[str] | None:
     """Cached passages for a book, or None if there are none or the file is malformed."""
     path = _chunks_file(book_id)
     if not path.exists():
@@ -106,7 +107,7 @@ def load_chunks(book_id: str) -> list[str] | None:
     return chunks
 
 
-def get_book_chunks(book_id: str, text: str) -> list[str]:
+def get_book_chunks(book_id: int, text: str) -> list[str]:
     """Passages for a book: from the cache, or chunked from `text` and cached."""
     cached = load_chunks(book_id)
     if cached is not None:

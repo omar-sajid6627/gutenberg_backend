@@ -13,6 +13,7 @@
     }
   ],
   "env": {
-    "PYTHONPATH": "."
+    "PYTHONPATH": ".",
+    "DATA_DIR": "/tmp/gutenberg-data"
   }
 }

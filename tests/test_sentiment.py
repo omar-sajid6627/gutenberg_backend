@@ -35,35 +35,33 @@ FAKE_NLP = sa.NLPResources(
 
 
 @pytest.fixture(autouse=True)
-def isolated_cache(tmp_path, monkeypatch):
-    monkeypatch.setattr(sa, "SENTIMENT_DIR", tmp_path)
-    monkeypatch.setattr(sa, "_sentiment_cache", {})
+def fake_nlp(monkeypatch):
     monkeypatch.setattr(sa, "nlp_resources", lambda: FAKE_NLP)
 
 
 def test_happy_text_is_positive():
-    result = sa.analyze_book_sentiment("She was happy. Love and delight filled the house. " * 20, "11")
+    result = sa.analyze_book_sentiment("She was happy. Love and delight filled the house. " * 20, 11)
     assert result["overall_sentiment"] == "positive"
     assert result["status"] == "completed"
 
 
 def test_grim_text_is_negative():
-    result = sa.analyze_book_sentiment("Dreadful grief came. Misery and hate remained. " * 20, "12")
+    result = sa.analyze_book_sentiment("Dreadful grief came. Misery and hate remained. " * 20, 12)
     assert result["overall_sentiment"] == "negative"
 
 
 def test_word_frequencies_skip_stopwords_and_are_ranked():
-    result = sa.analyze_book_sentiment("The garden and the gardens. The garden was green. " * 5, "13")
+    result = sa.analyze_book_sentiment("The garden and the gardens. The garden was green. " * 5, 13)
     words = result["wordcloud_data"]["words"]
     assert words[0] == {"text": "garden", "value": 15}
     assert all(w["text"] not in FAKE_NLP.stop_words for w in words)
 
 
-def test_results_are_cached_to_disk(tmp_path):
-    sa.analyze_book_sentiment("Wonderful days were had by all of them. " * 10, "14")
-    assert (tmp_path / "book_14_sentiment.json").exists()
+def test_results_are_cached_to_disk(data_dir):
+    sa.analyze_book_sentiment("Wonderful days were had by all of them. " * 10, 14)
+    assert (data_dir / "sentiment" / "book_14_sentiment.json").exists()
     sa._sentiment_cache.clear()
-    assert sa.get_cached_sentiment("14")["overall_sentiment"] == "positive"
+    assert sa.get_cached_sentiment(14)["overall_sentiment"] == "positive"
 
 
 def test_sentence_sample_is_capped():
