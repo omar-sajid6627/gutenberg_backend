@@ -12,5 +12,10 @@
             "src": "/.*",
             "dest": "app/main.handler"
         }
-    ]
+    ],
+    "functions": {
+        "api/*.py": {
+            "runtime": "python"
+        }
+    }
 }
