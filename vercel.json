@@ -1,21 +1,15 @@
 {
     "version": 2,
-    "builds": [
-        {
-            "src": "app/main.py",
-            "use": "@vercel/python",
-            "config": {"maxLambdaSize": "15mb"}
+    "functions": {
+        "api/main.py": {
+            "runtime": "python",
+            "memory": 512
         }
-    ],
+    },
     "routes": [
         {
             "src": "/.*",
-            "dest": "app/main.handler"
+            "dest": "api/main.handler"
         }
-    ],
-    "functions": {
-        "api/*.py": {
-            "runtime": "python"
-        }
-    }
+    ]
 }
