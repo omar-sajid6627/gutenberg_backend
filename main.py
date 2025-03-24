@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional, Dict, Any
 from app.models import Book, BookList
-from app.scraper import fetch_book, fetch_book_content
+from app.scraper import fetch_book
 from app.utils import get_book_content
 import edge_tts
 import os
@@ -81,7 +81,7 @@ async def root():
 @app.get("/books/{book_id}", response_model=Book)
 async def get_book(book_id: str):
     # Fetch directly from Gutenberg without content
-    book = fetch_book(book_id, include_content=False)
+    book = fetch_book(book_id)
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
     return book

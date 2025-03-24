@@ -1,217 +1,166 @@
+"""Fetching book metadata and text from gutenberg.org."""
+
+from __future__ import annotations
+
+import logging
+import re
+
 import requests
 from bs4 import BeautifulSoup
-import re
-from typing import Dict, Optional
+
 from .models import Book
-import textwrap
 
-def fetch_and_format_book(book_id, words_per_page=500):
-    """
-    Fetches and formats a book from Project Gutenberg.
+logger = logging.getLogger(__name__)
 
-    Args:
-        book_id (int): The ID of the book.
-        words_per_page (int): Number of words per page for pagination.
+GUTENBERG = "https://www.gutenberg.org"
+# (connect, read) seconds. Without a timeout a stalled connection held a
+# worker thread forever.
+TIMEOUT = (5, 30)
+# The longest Gutenberg texts are a few MB; anything far beyond that is not a
+# book, and reading it into memory unbounded is a denial-of-service lever.
+MAX_TEXT_BYTES = 20 * 1024 * 1024
+MAX_HTML_BYTES = 2 * 1024 * 1024
+WORDS_PER_PAGE = 500
 
-    Returns:
-        list: A list of pages, each containing a chunk of text.
-    """
-    url = f"https://www.gutenberg.org/files/{book_id}/{book_id}-0.txt"
-    response = requests.get(url)
+SESSION = requests.Session()
+SESSION.headers["User-Agent"] = "gutenberg-backend (+https://www.gutenberg.org/policy/robot_access.html)"
 
-    if response.status_code != 200:
-        return ["Failed to fetch book content"]
+START_MARKER = re.compile(r"\*\*\* ?START OF (THE|THIS) PROJECT GUTENBERG[^\n]*")
+END_MARKER = re.compile(r"\*\*\* ?END OF (THE|THIS) PROJECT GUTENBERG")
 
-    raw_text = response.text
-    print(raw_text)
 
-    # Remove Gutenberg metadata (header and footer)
-    start_match = re.search(r"\*\*\* START OF (THE|THIS) PROJECT GUTENBERG", raw_text)
-    end_match = re.search(r"\*\*\* END OF (THE|THIS) PROJECT GUTENBERG", raw_text)
+class TooLarge(Exception):
+    pass
 
-    if start_match and end_match:
-        raw_text = raw_text[start_match.end():end_match.start()].strip()
 
-    # Normalize spaces and remove unwanted special characters
-    raw_text = re.sub(r"\s+", " ", raw_text)  # Replace multiple spaces/newlines with a single space
-    raw_text = raw_text.replace("_", "")  # Remove underscores used for italicization
-
-    print("PreProcessed raw_text: ", raw_text)
-    # Split into paragraphs based on double newlines
-    paragraphs = raw_text.split("\n\n")
-
-    # Format each paragraph for better readability
-    formatted_paragraphs = [textwrap.fill(p.strip(), width=80) for p in paragraphs if p.strip()]
-
-    # Join paragraphs with double newlines for spacing
-    formatted_text = "\n\n".join(formatted_paragraphs)
-
-    # Paginate the text
-    words = formatted_text.split()
-    pages = [" ".join(words[i:i+words_per_page]) for i in range(0, len(words), words_per_page)]
-
-    return pages
-
-def fetch_book_metadata(book_id: str) -> Optional[str]:
-    """Fetch book metadata from Project Gutenberg."""
-    metadata_url = f"https://www.gutenberg.org/ebooks/{book_id}"
+def _get_text(url: str, max_bytes: int) -> str | None:
+    """GET `url` as text, or None on any HTTP or network failure."""
     try:
-        response = requests.get(metadata_url)
-        response.raise_for_status()
-        return response.text
-    except requests.RequestException:
-        return None
+        with SESSION.get(url, stream=True, timeout=TIMEOUT) as response:
+            if response.status_code != 200:
+                return None
+            declared = int(response.headers.get("Content-Length") or 0)
+            if declared > max_bytes:
+                raise TooLarge(url)
+            body = bytearray()
+            for block in response.iter_content(64 * 1024):
+                body.extend(block)
+                if len(body) > max_bytes:
+                    raise TooLarge(url)
+            return body.decode(response.encoding or "utf-8", errors="replace")
+    except TooLarge:
+        logger.warning("Refusing %s: larger than %d bytes", url, max_bytes)
+    except requests.RequestException as exc:
+        logger.warning("Fetching %s failed: %s", url, exc)
+    return None
 
-def scrape_gutenberg_book(metadata: str) -> Optional[Dict]:
-    """Parse book metadata from HTML content."""
-    soup = BeautifulSoup(metadata, 'html.parser')
 
-    # Extract Title
+def text_urls(book_id: int) -> list[str]:
+    return [
+        f"{GUTENBERG}/cache/epub/{book_id}/pg{book_id}.txt",
+        f"{GUTENBERG}/files/{book_id}/{book_id}-0.txt",
+    ]
+
+
+def strip_boilerplate(raw: str) -> str:
+    """Drop the Project Gutenberg licence header and footer, if present."""
+    start, end = START_MARKER.search(raw), END_MARKER.search(raw)
+    if start and end and start.end() < end.start():
+        return raw[start.end() : end.start()]
+    return raw
+
+
+def paginate(text: str, words_per_page: int = WORDS_PER_PAGE) -> list[str]:
+    # Underscores mark italics in Gutenberg plain text.
+    words = text.replace("_", "").split()
+    return [" ".join(words[i : i + words_per_page]) for i in range(0, len(words), words_per_page)]
+
+
+def fetch_book_content(book_id: int) -> dict | None:
+    """The book's text split into pages, or None if it could not be fetched."""
+    for url in text_urls(book_id):
+        raw = _get_text(url, MAX_TEXT_BYTES)
+        if raw:
+            pages = paginate(strip_boilerplate(raw))
+            if pages:
+                return {"pages": pages, "total_pages": len(pages)}
+    return None
+
+
+def _row_value(soup: BeautifulSoup, prop: str) -> str | None:
+    row = soup.find("tr", property=prop)
+    cell = row.find("td") if row else None
+    return cell.get_text(strip=True) if cell else None
+
+
+def _table_values(soup: BeautifulSoup, heading: str) -> list[str]:
+    values = []
+    for th in soup.find_all("th", string=heading):
+        td = th.find_next_sibling("td")
+        if td:
+            values.append(td.get_text(strip=True))
+    return values
+
+
+def scrape_gutenberg_book(html: str) -> dict:
+    """Parse the fields we use from a gutenberg.org /ebooks/<id> page."""
+    soup = BeautifulSoup(html, "html.parser")
+
     title = soup.find("td", itemprop="headline")
-    title_text = title.get_text(strip=True) if title else "N/A"
+    author = soup.find("a", rel="marcrel:aut")
 
-    # Extract author
-    author_tag = soup.find('a', rel='marcrel:aut')
-    author = author_tag.text.strip() if author_tag else "Author not found"
-
-    # Extract cover image URL
-    cover_image = soup.find('img', {'class': 'cover-art'})
     cover_url = None
-    if cover_image:
-        img_src = cover_image['src']
-        print(img_src)
-        # Check if URL already includes the domain
-        if img_src.startswith('http'):
-            cover_url = img_src
-            print(cover_url)
+    cover = soup.find("img", class_="cover-art")
+    if cover and cover.get("src"):
+        src = cover["src"]
+        cover_url = src if src.startswith("http") else GUTENBERG + src
 
-        else:
-            cover_url = "https://www.gutenberg.org" + img_src
+    summary = soup.find(class_="summary-text-container")
 
-    # Extract Summary
-    summary_container = soup.find(class_="summary-text-container")
-    summary_text = summary_container.get_text(strip=True) if summary_container else "N/A"
-
-    # Extract Notes
-    notes = []
-    print("Looking for notes in HTML structure...")
-    
-    note_elements = soup.find_all("th", string="Note")
-    print(f"Found {len(note_elements)} note elements")
-    
-    for note in note_elements:
-        note_text = note.find_next_sibling("td").get_text(strip=True)
-        notes.append(note_text)
-        print(f"Found note: {note_text}")
-
-    print(f"All notes collected: {notes}")
-
-    # Extract Subjects
-    subjects = []
-    for subject in soup.find_all("th", string="Subject"):
-        subject_text = subject.find_next_sibling("td").get_text(strip=True)
-        subjects.append(subject_text)
-
-    # Extract downloads
-    downloads_tag = soup.find("td", itemprop="interactionCount")
     downloads = 0
-    if downloads_tag:
-        match = re.search(r"(\d+)", downloads_tag.text)
-        downloads = int(match.group(1)) if match else 0
+    downloads_cell = soup.find("td", itemprop="interactionCount")
+    if downloads_cell:
+        match = re.search(r"\d+", downloads_cell.get_text())
+        downloads = int(match.group()) if match else 0
 
-    # Extract language
-    language = None
-    language_td = soup.find("tr", property="dcterms:language")
-    if language_td:
-        language = language_td.find("td").text.strip()
-
-    # Extract release date
-    release_date = None
-    release_td = soup.find("tr", property="dcterms:issued")
-    if release_td:
-        release_date = release_td.find("td").text.strip()
-
-    # Extract reading ease score
+    notes = _table_values(soup, "Note")
     reading_ease_score = None
     for note in notes:
         match = re.search(r"Reading ease score:\s*([\d.]+)", note)
         if match:
             reading_ease_score = float(match.group(1))
-            break  # Only break if we found a match
+            break
 
-    print(f"Final reading ease score being returned: {reading_ease_score}")
     return {
-        "title": title_text,
-        "author": author,
+        "title": title.get_text(strip=True) if title else "N/A",
+        "author": author.get_text(strip=True) if author else "Author not found",
         "cover_url": cover_url,
-        "summary": summary_text,
+        "summary": summary.get_text(strip=True) if summary else "N/A",
         "notes": notes,
-        "subjects": subjects,
+        "subjects": _table_values(soup, "Subject"),
         "downloads": downloads,
-        "language": language or "N/A",
-        "release_date": release_date or "N/A",
-        "reading_ease_score": reading_ease_score
+        "language": _row_value(soup, "dcterms:language") or "N/A",
+        "release_date": _row_value(soup, "dcterms:issued") or "N/A",
+        "reading_ease_score": reading_ease_score,
     }
 
-def fetch_book_content(book_id: str) -> Optional[Dict]:
-    """Fetch book content from Project Gutenberg with pagination."""
-    print(f"\n=== Fetching book content ===")
-    print(f"Attempting to fetch content for book: {book_id}")
-    try:
-        pages = fetch_and_format_book(book_id)
-        if not pages or pages[0] == "Failed to fetch book content":
-            print("Failed to fetch book content")
-            return None
-            
-        print(f"Successfully fetched {len(pages)} pages")
-        return {
-            "pages": pages,
-            "total_pages": len(pages)
-        }
-    except Exception as e:
-        print(f"Request failed with error: {str(e)}")
+
+def fetch_book(book_id: int) -> Book | None:
+    """Metadata for a book, or None if gutenberg.org has no page for it."""
+    html = _get_text(f"{GUTENBERG}/ebooks/{book_id}", MAX_HTML_BYTES)
+    if not html:
         return None
-
-def fetch_book(book_id: str, include_content: bool = False) -> Optional[Book]:  
-    """Fetch and parse a complete book from Project Gutenberg."""
-    print(f"\n=== Starting fetch_book for book_id: {book_id} ===")
-    
-    print("Fetching book metadata...")
-    metadata_html = fetch_book_metadata(book_id)
-    if not metadata_html:
-        print("Failed to fetch metadata")
-        return None
-
-    print("Scraping book metadata...")
-    metadata = scrape_gutenberg_book(metadata_html)
-    if not metadata:
-        print("Failed to scrape metadata")
-        return None
-
-    # Only fetch content if requested
-    content = None
-    if include_content:
-        print("Fetching book content...")
-        content = fetch_book_content(book_id)
-        if not content:
-            print("Failed to fetch content")
-            return None
-
-    print("Creating Book object...")
-    print(content)
-    book = Book(
-        id=book_id,
+    metadata = scrape_gutenberg_book(html)
+    return Book(
+        id=str(book_id),
         title=metadata["title"],
         author=metadata["author"],
         language=metadata["language"],
         category=", ".join(metadata["subjects"]),
-        ebook_no=book_id,
+        ebook_no=str(book_id),
         release_date=metadata["release_date"],
         summary=metadata["summary"],
         cover_url=metadata["cover_url"],
         downloads=metadata["downloads"],
         reading_ease_score=metadata["reading_ease_score"],
-        content=content
     )
-    print("Book object created successfully")
-    return book 
