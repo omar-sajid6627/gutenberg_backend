@@ -1,0 +1,18 @@
+# The Gutenberg API. No key required: without GROQ_API_KEY the ask and summary
+# endpoints answer extractively from the book's own text.
+services:
+  api:
+    build: { context: ., dockerfile: Dockerfile }
+    image: gutenberg-backend:local
+    container_name: gutenberg_api
+    environment:
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      # Where the browser reaches this API. The frontend defaults to the same.
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3600}
+    ports: ["8600:8000"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s

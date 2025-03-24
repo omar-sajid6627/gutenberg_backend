@@ -1,0 +1,39 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+project_venv/
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Deployment
+.vercel
+
+# Runtime caches and generated output
+data/cache/
+data/sentiment/
+data/chunks/
+backend/app/data/embeddings/
+temp_audio.mp3
+README.preview.html
+*.log
+tmp/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+
+# Not part of this repo
+.github/
