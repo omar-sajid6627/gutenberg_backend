@@ -18,6 +18,7 @@ import os
 from pathlib import Path
 
 from app.config import DATA_DIR, book_file
+from app.utils.local_llm import content_words
 from app.utils.sentences import split_sentences
 
 logger = logging.getLogger(__name__)
@@ -119,3 +120,22 @@ def get_book_chunks(book_id: int, text: str) -> list[str]:
     chunks = chunk_text(text)
     save_chunks(book_id, chunks)
     return chunks
+
+
+def select_passages(chunks: list[str], query: str, limit: int = 3) -> list[str]:
+    """
+    The passages sharing the most words with the question, in book order.
+
+    Context used to be the opening, middle and closing passages whatever was
+    asked, so a question about chapter twenty was answered from chapter one.
+    If nothing overlaps, those three are still the fallback.
+    """
+    if len(chunks) <= limit:
+        return list(chunks)
+    query_words = content_words(query)
+    scores = [len(query_words & content_words(chunk)) for chunk in chunks]
+    ranked = sorted(range(len(chunks)), key=lambda i: (-scores[i], i))
+    picked = [i for i in ranked[:limit] if scores[i] > 0]
+    if not picked:
+        picked = [0, len(chunks) // 2, len(chunks) - 1]
+    return [chunks[i] for i in sorted(set(picked))]

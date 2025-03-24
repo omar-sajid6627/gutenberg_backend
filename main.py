@@ -28,7 +28,7 @@ from app.utils.sentiment_analysis import (
     get_cached_sentiment,
     nlp_resources,
 )
-from app.utils.text_chunking import get_book_chunks, load_chunks
+from app.utils.text_chunking import get_book_chunks, load_chunks, select_passages
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("gutenberg_api")
@@ -144,19 +144,17 @@ def get_readability(book_id: BookId):
     return {"book_id": book_id, **result.as_dict()}
 
 
-def context_for_question(book_id: int) -> str:
+def context_for_question(book_id: int, query: str) -> str:
     chunks = load_chunks(book_id)
     if chunks is None:
         chunks = get_book_chunks(book_id, "\n\n".join(require_content(book_id)["pages"]))
-    # Opening, middle and closing passages.
-    picked = sorted({0, len(chunks) // 2, len(chunks) - 1}) if chunks else []
-    return "\n\n".join(chunks[i] for i in picked)
+    return "\n\n".join(select_passages(chunks, query))
 
 
 @app.post("/books/{book_id}/ask")
 async def ask_about_book(book_id: BookId, request: QueryRequest):
     started = time.monotonic()
-    context = await run_in_threadpool(context_for_question, book_id)
+    context = await run_in_threadpool(context_for_question, book_id, request.query)
     response = await llm_handler.generate_response(
         query=request.query, context=context, temperature=request.temperature
     )

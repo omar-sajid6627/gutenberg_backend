@@ -95,3 +95,28 @@ class TestChunking:
         first = tc.get_book_chunks(3, sentences(10))
         assert (isolated_store / "book_3_chunks.json").exists()
         assert tc.get_book_chunks(3, "completely different text.") == first
+
+
+class TestPassageSelection:
+    CHUNKS = [
+        "The voyage began in spring with a calm sea.",
+        "They mended nets and talked about the harvest.",
+        "A storm broke the mast and the lighthouse lamp went dark.",
+        "Weeks of quiet trading followed in the southern ports.",
+        "At last the ship came home and the crew were paid.",
+    ]
+
+    def test_the_passage_that_matches_the_question_is_chosen(self):
+        picked = tc.select_passages(self.CHUNKS, "What happened during the storm?", limit=1)
+        assert picked == [self.CHUNKS[2]]
+
+    def test_selected_passages_stay_in_book_order(self):
+        picked = tc.select_passages(self.CHUNKS, "storm ship home", limit=2)
+        assert picked == [self.CHUNKS[2], self.CHUNKS[4]]
+
+    def test_no_overlap_falls_back_to_opening_middle_and_end(self):
+        picked = tc.select_passages(self.CHUNKS, "quantum chromodynamics", limit=3)
+        assert picked == [self.CHUNKS[0], self.CHUNKS[2], self.CHUNKS[4]]
+
+    def test_short_books_are_used_whole(self):
+        assert tc.select_passages(self.CHUNKS[:2], "anything") == self.CHUNKS[:2]

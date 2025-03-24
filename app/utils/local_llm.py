@@ -42,7 +42,8 @@ def _stem(word: str) -> str:
     return word
 
 
-def _tokens(text: str) -> set[str]:
+def content_words(text: str) -> set[str]:
+    """Stemmed, lower-cased words of three letters or more, minus stopwords."""
     words = re.findall(r"[a-z0-9']+", text.lower())
     return {_stem(w) for w in words if w not in STOPWORDS and len(w) > 2}
 
@@ -63,7 +64,7 @@ def _sentences(text: str, min_length: int = 15) -> list[str]:
 
 def score(sentence: str, query_tokens: set[str]) -> float:
     """Overlap with the question, normalised so long sentences do not win by length."""
-    tokens = _tokens(sentence)
+    tokens = content_words(sentence)
     if not tokens:
         return 0.0
     overlap = len(tokens & query_tokens)
@@ -78,7 +79,7 @@ def answer_from_context(query: str, context: str, max_sentences: int = 4) -> str
             "content may still be downloading."
         )
 
-    query_tokens = _tokens(query)
+    query_tokens = content_words(query)
     scored = [(score(s, query_tokens), s) for s in _sentences(context)]
     scored = [(sc, s) for sc, s in scored if sc > 0]
     scored.sort(key=lambda pair: -pair[0])
