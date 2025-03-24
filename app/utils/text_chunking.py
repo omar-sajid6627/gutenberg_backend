@@ -1,5 +1,3 @@
-from nltk.tokenize import sent_tokenize
-import nltk
 import os
 # Set environment variable for tokenizers parallelism to avoid warnings
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -11,17 +9,11 @@ import pickle
 from pathlib import Path
 import time
 
+from app.utils.sentences import split_sentences
+
 # Create a directory for storing embeddings if it doesn't exist
 EMBEDDINGS_DIR = Path("backend/app/data/embeddings")
 EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
-
-# Download required NLTK data (you only need to do this once)
-try:
-    nltk.data.find('tokenizers/punkt')
-    nltk.data.find('tokenizers/punkt_tab')
-except LookupError:
-    nltk.download('punkt', quiet=True)
-    nltk.download('punkt_tab')
 
 # Lazy initialization of embedding model to prevent issues with forking
 embeddings_model = None
@@ -109,7 +101,7 @@ def chunk_text(text: str, chunk_size: int = 1024, overlap: int = 100) -> list[st
         return []
 
     try:
-        sentences = sent_tokenize(text)
+        sentences = split_sentences(text)
         chunks = []
         current_chunk = []
         current_length = 0

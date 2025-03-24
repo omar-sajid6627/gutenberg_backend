@@ -16,33 +16,18 @@ import asyncio
 import re
 from app.utils.text_chunking import chunk_text, get_chunk_info, process_text, load_embeddings
 from app.utils.llm_handler import llm_handler
-from app.utils.sentiment_analysis import analyze_book_sentiment, get_cached_sentiment
+from app.utils.sentiment_analysis import (
+    MissingNLTKData,
+    analyze_book_sentiment,
+    get_cached_sentiment,
+    nlp_resources,
+)
 from app.utils.readability import flesch_reading_ease
 from app.utils.content_cache import clear_cache
 import numpy as np
 from mangum import Mangum  # Required for Vercel
 import uvicorn
 import time
-import nltk
-
-# Set NLTK data path to a writable location in Koyeb
-nltk_data_dir = "/tmp/nltk_data"
-os.makedirs(nltk_data_dir, exist_ok=True)
-nltk.data.path.insert(0, nltk_data_dir)
-
-# Download required NLTK data at startup
-try:
-    nltk.download('punkt', quiet=True, download_dir=nltk_data_dir)
-    nltk.download('punkt_tab', quiet=True, download_dir=nltk_data_dir)
-    nltk.download('stopwords', quiet=True, download_dir=nltk_data_dir)
-    nltk.download('vader_lexicon', quiet=True, download_dir=nltk_data_dir)
-    nltk.download('averaged_perceptron_tagger', quiet=True, download_dir=nltk_data_dir)
-    nltk.download('maxent_ne_chunker', quiet=True, download_dir=nltk_data_dir)
-    nltk.download('words', quiet=True, download_dir=nltk_data_dir)
-    nltk.download('wordnet', quiet=True, download_dir=nltk_data_dir)
-    print("✅ NLTK resources downloaded successfully")
-except Exception as e:
-    print(f"⚠️ Warning: Failed to download NLTK resources: {str(e)}")
 
 app = FastAPI(
     title="Gutenberg API",
@@ -326,23 +311,13 @@ async def analyze_book_sentiment_endpoint(book_id: str, background_tasks: Backgr
         if "pages" not in content_data or not content_data["pages"]:
             raise HTTPException(status_code=404, detail=f"No page content available for book {book_id}")
         
-        # Combine all pages into one text
         full_content = "\n\n".join(content_data["pages"])
-        content_length = len(full_content)
-        print(f"Content retrieved: {content_length:,} characters")
-        
-        # For extremely large books, provide a warning and sample just beginning and end
-        if content_length > 1_500_000:
-            print(f"⚠️ Extremely large book detected: {content_length:,} characters!")
-            print("Sampling content instead of full analysis to prevent timeout")
-            # Take first 400K, middle 200K and last 400K chars
-            first_part = full_content[:400000]
-            middle_start = (len(full_content) - 200000) // 2
-            middle_part = full_content[middle_start:middle_start + 200000]
-            last_part = full_content[-400000:]
-            full_content = first_part + "...\n\n[CONTENT SAMPLED FOR PERFORMANCE]...\n\n" + middle_part + "...\n\n[CONTENT SAMPLED FOR PERFORMANCE]...\n\n" + last_part
-            print(f"Reduced to {len(full_content):,} characters for analysis")
-        
+
+        try:
+            nlp_resources()
+        except MissingNLTKData as exc:
+            raise HTTPException(status_code=503, detail=str(exc))
+
         # Create a placeholder result to return immediately
         placeholder_result = {
             "book_id": book_id,

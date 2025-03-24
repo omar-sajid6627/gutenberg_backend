@@ -15,10 +15,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
  && pip install --no-cache-dir -r requirements.txt
 
-# NLTK corpora are downloaded at first use by default, which turns a cold
-# start into a silent network call — and fails outright on a machine with no
-# outbound access. Fetch them at build time instead.
-RUN python -c "import nltk; [nltk.download(p, download_dir='/app/.nltk', quiet=True) for p in ('punkt','punkt_tab','vader_lexicon','stopwords')]"
+# The API never downloads NLTK data itself, so fetch it at build time.
+COPY scripts/download_nltk_data.py scripts/
+RUN python scripts/download_nltk_data.py --dir /app/.nltk
 
 COPY requirements-dev.txt .
 RUN pip install --no-cache-dir -r requirements-dev.txt
