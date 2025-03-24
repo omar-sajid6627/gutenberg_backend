@@ -15,6 +15,9 @@ import re
 from .utils.text_chunking import chunk_text, get_chunk_info, process_text, load_embeddings
 from .utils.llm_handler import llm_handler
 import numpy as np
+from mangum import Mangum  # Required for Vercel
+
+
 
 app = FastAPI(
     title="Gutenberg API",
@@ -248,3 +251,6 @@ async def ask_about_book(book_id: str, request: QueryRequest):
             status_code=500,
             detail=f"Error processing query: {str(e)}"
         ) 
+    
+
+    handler = Mangum(app)  # Expose app to Vercel
