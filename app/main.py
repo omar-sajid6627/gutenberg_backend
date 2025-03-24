@@ -16,6 +16,7 @@ from .utils.text_chunking import chunk_text, get_chunk_info, process_text, load_
 from .utils.llm_handler import llm_handler
 import numpy as np
 from mangum import Mangum  # Required for Vercel
+import uvicorn
 
 
 
@@ -70,6 +71,13 @@ def split_text_into_chunks(text: str, chunk_size: int = 1000) -> List[str]:
 @app.get("/")
 async def root():
     return {"message": "Welcome to Gutenberg API"}
+
+# ✅ Place `handler = Mangum(app)` OUTSIDE all functions
+handler = Mangum(app)
+
+# ✅ Ensure `if __name__ == "__main__"` is properly placed
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
 
 @app.get("/books/{book_id}", response_model=Book)
 async def get_book(book_id: str):
@@ -251,6 +259,4 @@ async def ask_about_book(book_id: str, request: QueryRequest):
             status_code=500,
             detail=f"Error processing query: {str(e)}"
         ) 
-    
-
-    handler = Mangum(app)  # Expose app to Vercel
+   
