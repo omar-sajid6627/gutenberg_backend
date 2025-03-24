@@ -1,17 +1,22 @@
-import os
-from langchain_groq import ChatGroq
-from typing import Optional
-from dotenv import load_dotenv
-import traceback
-import json
-import asyncio
-from langchain_core.messages import HumanMessage
-import time
+"""
+Answers from Groq's hosted Llama when GROQ_API_KEY is set, and from the
+extractive LocalLLMHandler when it is not.
+"""
 
-# Load environment variables
-load_dotenv()
+from __future__ import annotations
+
+import asyncio
+import logging
+import os
+
+from dotenv import load_dotenv
+from langchain_core.messages import HumanMessage
 
 from app.utils.local_llm import LocalLLMHandler, usable_api_key
+
+load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 # `os.environ["GROQ_API_KEY"] = GROQ_API_KEY` raised
 # `TypeError: str expected, not NoneType` whenever the key was unset, so this
@@ -21,109 +26,62 @@ GROQ_API_KEY = usable_api_key("GROQ_API_KEY")
 if GROQ_API_KEY:
     os.environ["GROQ_API_KEY"] = GROQ_API_KEY
 
-# Constants
+MODEL = "llama-3.1-8b-instant"
 API_TIMEOUT = 30  # seconds
 
+
+def build_prompt(query: str, context: str | None) -> str:
+    if not context:
+        return query
+    return (
+        f"Context: {context}\n\n"
+        f"Question: {query}\n\n"
+        "Provide a concise answer based on the given context. "
+        "Keep your response brief and to the point."
+    )
+
+
 class LLMHandler:
-    def __init__(self):
-        """Initialize the LLM handler with Groq model."""
+    is_local = False
+
+    def __init__(self, llm=None):
+        if llm is None:
+            from langchain_groq import ChatGroq
+
+            llm = ChatGroq(model=MODEL, temperature=0, max_tokens=1000, timeout=API_TIMEOUT, max_retries=1)
+        self.llm = llm
+
+    async def generate_response(self, query: str, context: str | None = None, temperature: float = 0) -> str:
+        messages = [HumanMessage(content=build_prompt(query, context))]
         try:
-            self.llm = ChatGroq(
-                model="llama-3.1-8b-instant",  # Using a smaller, faster model
-                temperature=0,
-                max_tokens=1000,  # Limit token generation for faster responses
-                timeout=API_TIMEOUT,  # Explicit timeout
-                max_retries=1  # Reduced retries to fail faster
+            # The request's temperature used to be accepted and then ignored.
+            response = await asyncio.wait_for(
+                self.llm.ainvoke(messages, temperature=temperature), timeout=API_TIMEOUT
             )
-            print("LLM initialized successfully")
-        except Exception as e:
-            print(f"Error initializing LLM: {str(e)}")
-            traceback.print_exc()
-            raise Exception(f"Failed to initialize LLM: {str(e)}")
-    
-    async def generate_response(
-        self,
-        query: str,
-        context: Optional[str] = None,
-        temperature: float = 0
-    ) -> str:
-        """
-        Generate a response using the LLM.
-        
-        Args:
-            query (str): User's question
-            context (str, optional): Additional context for the LLM
-            temperature (float): Temperature for response generation
-            
-        Returns:
-            str: Generated response
-        """
-        try:
-            print(f"Starting LLM response generation for query: {query[:50]}...")
-            
-            # Prepare the prompt
-            if context:
-                prompt = f"""Context: {context}
+        except asyncio.TimeoutError:
+            logger.warning("Groq request timed out after %ss", API_TIMEOUT)
+            return "I'm sorry, but the request to the AI service timed out. Please try again later."
+        except Exception:
+            # Upstream errors can echo request details; log them, don't return them.
+            logger.exception("Groq request failed")
+            return "I'm sorry, but I encountered an error while generating a response. Please try again."
+        return response.content
 
-Question: {query}
-
-Provide a concise answer based on the given context. Keep your response brief and to the point."""
-            else:
-                prompt = query
-
-            print(f"Prompt prepared, sending to Groq API at {time.strftime('%H:%M:%S')}...")
-            
-            # Implement a timeout using asyncio
-            try:
-                # Create a message instead of just a string prompt
-                messages = [HumanMessage(content=prompt)]
-                
-                # Set a timeout using asyncio
-                response_task = self.llm.ainvoke(messages)
-                response = await asyncio.wait_for(response_task, timeout=API_TIMEOUT)
-                
-                print(f"Response received from Groq API at {time.strftime('%H:%M:%S')}. Response type: {type(response)}")
-                
-                if not hasattr(response, 'content'):
-                    print(f"WARNING: Response doesn't have 'content' attribute. Full response: {str(response)[:200]}...")
-                    # Try to extract content from response if it's a dictionary
-                    if isinstance(response, dict) and 'content' in response:
-                        return response['content']
-                    return str(response)
-                
-                content = response.content
-                print(f"✅ Generated response: {content[:100]}...")
-                return content
-                
-            except asyncio.TimeoutError:
-                print(f"❌ Groq API request timed out after {API_TIMEOUT} seconds")
-                return f"I'm sorry, but the request to the AI service timed out. Please try a simpler query or try again later."
-            
-        except Exception as e:
-            print(f"❌ Error generating response: {str(e)}")
-            traceback.print_exc()
-            # Return a fallback response rather than raising an exception
-            return f"I'm sorry, but I encountered an error while generating a response: {str(e)}. Please try again."
 
 def _build_handler():
     """
     Pick a handler: the hosted model when a usable key is present, the local
-    extractive one otherwise.
-
-    Constructed at import as a singleton, which is why the missing-key crash
-    took down the entire application rather than one endpoint.
+    extractive one otherwise. A key that fails to initialise degrades to the
+    local handler rather than making the API unimportable.
     """
     if not GROQ_API_KEY:
-        print("No GROQ_API_KEY set — answering extractively from book text.")
+        logger.info("No GROQ_API_KEY set; answering extractively from book text.")
         return LocalLLMHandler()
     try:
         return LLMHandler()
     except Exception as exc:
-        # A bad key should degrade to something that works rather than making
-        # the API unimportable.
-        print(f"Groq unavailable ({exc}); falling back to extractive answers.")
+        logger.warning("Groq unavailable (%s); falling back to extractive answers.", exc)
         return LocalLLMHandler()
 
 
-# Create a singleton instance
-llm_handler = _build_handler() 
+llm_handler = _build_handler()
