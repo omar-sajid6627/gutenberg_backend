@@ -6,15 +6,13 @@ from app.scraper import fetch_book, fetch_book_content
 from app.utils import get_book_content
 import edge_tts
 import os
-# Set environment variable for tokenizers parallelism to avoid warnings
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 import io
 import tempfile
 import asyncio
 import re
-from app.utils.text_chunking import chunk_text, get_chunk_info, process_text, load_embeddings
+from app.utils.text_chunking import get_book_chunks, load_chunks
 from app.utils.llm_handler import llm_handler
 from app.utils.sentiment_analysis import (
     MissingNLTKData,
@@ -24,7 +22,6 @@ from app.utils.sentiment_analysis import (
 )
 from app.utils.readability import flesch_reading_ease
 from app.utils.content_cache import clear_cache
-import numpy as np
 from mangum import Mangum  # Required for Vercel
 import uvicorn
 import time
@@ -207,36 +204,13 @@ async def ask_about_book(book_id: str, request: QueryRequest):
         print(f"Query: {request.query}")
         start_time = time.time()
         
-        # Load existing embeddings
-        chunk_embeddings = load_embeddings(book_id)
-        
-        # If no embeddings found, generate them
-        if not chunk_embeddings:
-            print(f"No embeddings found for book {book_id}, generating them now...")
-            try:
-                # Get content from cache or fetch if needed
-                content = get_book_content(book_id)
-                if not content:
-                    raise HTTPException(status_code=404, detail="Book content not found")
-                
-                # Compile full content from pages
-                full_content = "\n\n".join(content['pages'])
-                
-                # Process the content (chunk and generate embeddings)
-                processed_content = process_text(full_content, book_id)
-                chunks = processed_content["chunks"]  # This is already a list of strings
-                
-                print(f"Generated new embeddings for book {book_id}")
-            except Exception as e:
-                print(f"Error generating embeddings: {str(e)}")
-                raise HTTPException(
-                    status_code=500,
-                    detail="Failed to generate embeddings. Please try again."
-                )
-        else:
-            # Extract text from loaded embeddings
-            chunks = [chunk["text"] for chunk in chunk_embeddings]
-        
+        chunks = load_chunks(book_id)
+        if chunks is None:
+            content = get_book_content(book_id)
+            if not content:
+                raise HTTPException(status_code=404, detail="Book content not found")
+            chunks = get_book_chunks(book_id, "\n\n".join(content["pages"]))
+
         # For better performance, use just a few chunks for context
         # Use first chunk (book intro) and 2 random chunks from the middle
         print(f"Using a sample of chunks for better performance")
