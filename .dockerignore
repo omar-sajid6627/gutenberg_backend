@@ -1,0 +1,15 @@
+.git
+.env
+.env.*
+project_venv
+venv
+.venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.ruff_cache
+.DS_Store
+.vercel
+data
+backend
+temp_audio.mp3
