@@ -1,9 +1,9 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional, Dict, Any
-from .models import Book, BookList
-from .scraper import fetch_book, fetch_book_content
-from .utils import get_book_content
+from app.models import Book, BookList
+from app.scraper import fetch_book, fetch_book_content
+from app.utils import get_book_content
 import edge_tts
 import os
 # Set environment variable for tokenizers parallelism to avoid warnings
@@ -15,10 +15,10 @@ import wave
 import tempfile
 import asyncio
 import re
-from .utils.text_chunking import chunk_text, get_chunk_info, process_text, load_embeddings
-from .utils.llm_handler import llm_handler
-from .utils.sentiment_analysis import analyze_book_sentiment
-from .utils.content_cache import clear_cache
+from app.utils.text_chunking import chunk_text, get_chunk_info, process_text, load_embeddings
+from app.utils.llm_handler import llm_handler
+from app.utils.sentiment_analysis import analyze_book_sentiment
+from app.utils.content_cache import clear_cache
 import numpy as np
 from mangum import Mangum  # Required for Vercel
 import uvicorn

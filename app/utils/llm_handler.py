@@ -12,7 +12,7 @@ import time
 load_dotenv()
 
 # Set Groq API key
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "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")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 os.environ["GROQ_API_KEY"] = GROQ_API_KEY
 
 # Constants
