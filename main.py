@@ -22,6 +22,10 @@ import numpy as np
 from mangum import Mangum  # Required for Vercel
 import uvicorn
 import time
+import nltk
+nltk.download('punkt')
+nltk.download('stopwords')
+nltk.download('wordnet')
 
 
 
