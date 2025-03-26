@@ -1,2 +1,6 @@
 .vercel
 .env
+<<<<<<< HEAD
+=======
+venv
+>>>>>>> 84d79dc (Preparing backend for deployement)
