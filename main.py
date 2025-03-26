@@ -23,8 +23,8 @@ from mangum import Mangum  # Required for Vercel
 import uvicorn
 import time
 import nltk
-nltk.download('punkt')
 nltk.download('stopwords')
+nltk.download('punkt')
 nltk.download('wordnet')
 nltk.download('omw-1.4')  # Optional for WordNet
 
@@ -263,8 +263,7 @@ async def analyze_book_sentiment_endpoint(book_id: str):
     try:
         print(f"\n=== Analyzing sentiment for book {book_id} ===")
         
-        # Get book content directly using the content endpoint function
-        # This is the key fix - we need the content, not just the book metadata
+        
         content_data = get_book_content(book_id)
         
         if not content_data:
