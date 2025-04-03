@@ -35,9 +35,9 @@ try:
     nltk.download('averaged_perceptron_tagger', quiet=True, download_dir=nltk_data_dir)
     nltk.download('maxent_ne_chunker', quiet=True, download_dir=nltk_data_dir)
     nltk.download('words', quiet=True, download_dir=nltk_data_dir)
-    print("✅ NLTK resources downloaded successfully")
+    print("NLTK resources downloaded successfully")
 except Exception as e:
-    print(f"⚠️ Warning: Failed to download NLTK resources: {str(e)}")
+    print(f"Warning: Failed to download NLTK resources: {str(e)}")
 
 app = FastAPI(
     title="Gutenberg API",
@@ -202,9 +202,9 @@ async def ask_about_book(book_id: str, request: QueryRequest):
                 processed_content = process_text(full_content, book_id)
                 chunks = processed_content["chunks"]  # This is already a list of strings
                 
-                print(f"✅ Generated new embeddings for book {book_id}")
+                print(f"Generated new embeddings for book {book_id}")
             except Exception as e:
-                print(f"❌ Error generating embeddings: {str(e)}")
+                print(f"Error generating embeddings: {str(e)}")
                 raise HTTPException(
                     status_code=500,
                     detail="Failed to generate embeddings. Please try again."
@@ -253,7 +253,7 @@ async def ask_about_book(book_id: str, request: QueryRequest):
         return result
         
     except Exception as e:
-        print(f"❌ Error processing query: {str(e)}")
+        print(f"Error processing query: {str(e)}")
         # Print the full error traceback for debugging
         import traceback
         traceback.print_exc()
@@ -291,7 +291,7 @@ async def analyze_book_sentiment_endpoint(book_id: str):
         return result
         
     except Exception as e:
-        print(f"❌ Error in sentiment endpoint: {str(e)}")
+        print(f"Error in sentiment endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to analyze sentiment: {str(e)}")
 
 @app.delete("/cache/{book_id}")
