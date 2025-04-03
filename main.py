@@ -23,12 +23,21 @@ from mangum import Mangum  # Required for Vercel
 import uvicorn
 import time
 import nltk
-nltk.download('stopwords')
-nltk.download('punkt')
-nltk.download('wordnet')
-nltk.download('omw-1.4')  # Optional for WordNet
 
+# Set NLTK data path to a writable location in Koyeb
+nltk_data_dir = "/tmp/nltk_data"
+os.makedirs(nltk_data_dir, exist_ok=True)
+nltk.data.path.insert(0, nltk_data_dir)
 
+# Download required NLTK data at startup
+try:
+    nltk.download('punkt', quiet=True, download_dir=nltk_data_dir)
+    nltk.download('averaged_perceptron_tagger', quiet=True, download_dir=nltk_data_dir)
+    nltk.download('maxent_ne_chunker', quiet=True, download_dir=nltk_data_dir)
+    nltk.download('words', quiet=True, download_dir=nltk_data_dir)
+    print("✅ NLTK resources downloaded successfully")
+except Exception as e:
+    print(f"⚠️ Warning: Failed to download NLTK resources: {str(e)}")
 
 app = FastAPI(
     title="Gutenberg API",
