@@ -31,7 +31,7 @@ nltk.data.path.insert(0, nltk_data_dir)
 
 # Download required NLTK data at startup
 try:
-    nltk.download('punkt', quiet=True, download_dir=nltk_data_dir)
+    nltk.download('punkt_tab', quiet=True, download_dir=nltk_data_dir)
     nltk.download('averaged_perceptron_tagger', quiet=True, download_dir=nltk_data_dir)
     nltk.download('maxent_ne_chunker', quiet=True, download_dir=nltk_data_dir)
     nltk.download('words', quiet=True, download_dir=nltk_data_dir)

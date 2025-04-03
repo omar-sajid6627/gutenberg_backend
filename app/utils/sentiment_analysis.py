@@ -21,12 +21,12 @@ SENTIMENT_CACHE_EXPIRATION = 43200
 
 # Download necessary NLTK resources
 try:
-    nltk.data.find('tokenizers/punkt')
+    nltk.data.find('tokenizers/punkt_tab')
     nltk.data.find('corpora/stopwords')
     nltk.data.find('sentiment/vader_lexicon')
     nltk.data.find('corpora/wordnet')
 except LookupError:
-    nltk.download('punkt', quiet=True)
+    nltk.download('punkt_tab', quiet=True)
     nltk.download('stopwords', quiet=True)
     nltk.download('vader_lexicon', quiet=True)
     nltk.download('wordnet', quiet=True)
