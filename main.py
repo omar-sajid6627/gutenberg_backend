@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional, Dict, Any
 from app.models import Book, BookList
@@ -268,7 +268,7 @@ async def ask_about_book(book_id: str, request: QueryRequest):
 
 @app.get("/books/{book_id}/sentiment", response_model=Dict[str, Any])
 @app.post("/books/{book_id}/sentiment", response_model=Dict[str, Any])
-async def analyze_book_sentiment_endpoint(book_id: str):
+async def analyze_book_sentiment_endpoint(book_id: str, background_tasks: BackgroundTasks):
     """
     Get sentiment analysis for a book.
     Supports both GET and POST methods for flexibility.
@@ -308,23 +308,45 @@ async def analyze_book_sentiment_endpoint(book_id: str):
             full_content = first_part + "...\n\n[CONTENT SAMPLED FOR PERFORMANCE]...\n\n" + middle_part + "...\n\n[CONTENT SAMPLED FOR PERFORMANCE]...\n\n" + last_part
             print(f"Reduced to {len(full_content):,} characters for analysis")
         
-        # Analyze sentiment
-        start_time = time.time()
-        print("Starting sentiment analysis...")
-        try:
-            result = analyze_book_sentiment(full_content, book_id)
-            print(f"✅ Sentiment analysis completed in {time.time() - start_time:.2f} seconds")
-            return result
-        except Exception as e:
-            # Special handling for memory errors
-            if "memory" in str(e).lower() or "killed" in str(e).lower():
-                print(f"⚠️ Memory error detected: {str(e)}")
-                raise HTTPException(
-                    status_code=413, 
-                    detail=f"Book is too large for sentiment analysis (contains {content_length:,} characters). Please try a smaller book."
-                )
-            else:
-                raise e
+        # Create a placeholder result to return immediately
+        placeholder_result = {
+            "book_id": book_id,
+            "sentiment": {
+                "positive": 0,
+                "negative": 0,
+                "neutral": 1.0,
+                "compound": 0,
+                "overall": "neutral"
+            },
+            "overall_sentiment": "neutral",
+            "wordcloud_data": {
+                "words": [],
+                "word_count": 0,
+                "total_words_analyzed": 0
+            },
+            "status": "processing",
+            "message": "Sentiment analysis is being processed in the background. Please check again in a few moments."
+        }
+        
+        # Add the actual analysis to background tasks
+        def run_sentiment_analysis():
+            try:
+                start_time = time.time()
+                print("Starting background sentiment analysis...")
+                result = analyze_book_sentiment(full_content, book_id)
+                print(f"✅ Background sentiment analysis completed in {time.time() - start_time:.2f} seconds")
+                return result
+            except Exception as e:
+                print(f"❌ Error in background sentiment analysis: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                return None
+        
+        # Add the analysis task to background tasks
+        background_tasks.add_task(run_sentiment_analysis)
+        
+        # Return the placeholder result immediately
+        return placeholder_result
         
     except HTTPException as he:
         # Re-raise HTTP exceptions as-is
