@@ -18,8 +18,10 @@ EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
 # Download required NLTK data (you only need to do this once)
 try:
     nltk.data.find('tokenizers/punkt')
+    nltk.data.find('tokenizers/punkt_tab')
 except LookupError:
-    nltk.download('punkt')
+    nltk.download('punkt', quiet=True)
+    nltk.download('punkt_tab')
 
 # Lazy initialization of embedding model to prevent issues with forking
 embeddings_model = None
