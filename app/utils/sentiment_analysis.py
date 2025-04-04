@@ -55,7 +55,12 @@ def get_cached_sentiment(book_id: str) -> Optional[Dict[str, Any]]:
         # Check if cache is still valid
         if time.time() - cache_entry["timestamp"] < SENTIMENT_CACHE_EXPIRATION:
             print(f"✅ Using cached sentiment analysis for book {book_id}")
-            return cache_entry["result"]
+            # Ensure the cached result has the status field
+            result = cache_entry["result"]
+            if "status" not in result:
+                result["status"] = "completed"
+                result["message"] = "Sentiment analysis completed successfully"
+            return result
         else:
             # Expired, remove from memory cache
             del _sentiment_cache[book_id]
@@ -70,12 +75,18 @@ def get_cached_sentiment(book_id: str) -> Optional[Dict[str, Any]]:
             # Check if disk cache is still valid
             if time.time() - cache_data.get("timestamp", 0) < SENTIMENT_CACHE_EXPIRATION:
                 # Update memory cache and return result
+                result = cache_data["result"]
+                # Ensure the cached result has the status field
+                if "status" not in result:
+                    result["status"] = "completed"
+                    result["message"] = "Sentiment analysis completed successfully"
+                
                 _sentiment_cache[book_id] = {
-                    "result": cache_data["result"],
+                    "result": result,
                     "timestamp": cache_data["timestamp"]
                 }
                 print(f"✅ Using disk cached sentiment analysis for book {book_id}")
-                return cache_data["result"]
+                return result
         except Exception as e:
             print(f"❌ Error reading sentiment cache file: {str(e)}")
     
@@ -135,11 +146,11 @@ def preprocess_text(content: str) -> List[str]:
     print("Converting to lowercase and cleaning text...")
     content = clean_pattern.sub('', content.lower())
 
-    # Tokenize but limit to first 100K words for very large texts
+    # Tokenize but limit to first 50K words for very large texts (reduced from 100K)
     raw_words = word_tokenize(content)
-    if len(raw_words) > 100000:
-        print(f"⚡ Too many tokens ({len(raw_words):,}), sampling first 100K for analysis")
-        raw_words = raw_words[:100000]
+    if len(raw_words) > 50000:
+        print(f"⚡ Too many tokens ({len(raw_words):,}), sampling first 50K for analysis")
+        raw_words = raw_words[:50000]
     
     # Remove stopwords
     print(f"Removing stopwords from {len(raw_words):,} tokens...")
@@ -147,15 +158,20 @@ def preprocess_text(content: str) -> List[str]:
 
     # Apply lemmatization and filter short words
     print(f"Applying lemmatization to {len(words):,} tokens...")
-    # Process in batches to show progress
-    batch_size = 10000
+    
+    # Process in larger batches for better performance
+    batch_size = 20000  # Increased from 10000
     processed_words = []
     
-    for i in range(0, len(words), batch_size):
-        batch = words[i:i+batch_size]
+    # Pre-filter words to reduce lemmatization workload
+    words_to_lemmatize = [word for word in words if len(word) > 2]
+    print(f"  Pre-filtered to {len(words_to_lemmatize):,} words for lemmatization")
+    
+    for i in range(0, len(words_to_lemmatize), batch_size):
+        batch = words_to_lemmatize[i:i+batch_size]
         if i % 20000 == 0:
-            print(f"  Progress: {i:,}/{len(words):,} tokens processed ({i/len(words)*100:.1f}%)")
-        batch_processed = [lemmatizer.lemmatize(word) for word in batch if len(word) > 2]
+            print(f"  Progress: {i:,}/{len(words_to_lemmatize):,} tokens processed ({i/len(words_to_lemmatize)*100:.1f}%)")
+        batch_processed = [lemmatizer.lemmatize(word) for word in batch]
         processed_words.extend(batch_processed)
     
     print(f"✅ Preprocessing complete: {len(processed_words):,} tokens after filtering")
@@ -191,16 +207,16 @@ def analyze_sentiment(content: str) -> Dict[str, float]:
     print(f"Analyzing sentiment for {len(sentences):,} sentences...")
     
     # Use just a sample of sentences if there are too many (for performance)
-    if len(sentences) > 500:
+    if len(sentences) > 300:  # Reduced from 500
         # Take an evenly distributed sample throughout the text
-        sample_size = 500
+        sample_size = 300  # Reduced from 500
         print(f"⚡ Too many sentences, sampling {sample_size} distributed sentences")
         step = max(1, len(sentences) // sample_size)
         sentences = sentences[::step][:sample_size]
         print(f"⚡ Reduced to {len(sentences)} sentences for analysis")
     
-    # Analyze each sentence in batches to show progress
-    batch_size = 50
+    # Analyze each sentence in larger batches for better performance
+    batch_size = 100  # Increased from 50
     sentiment_scores = []
     
     for i in range(0, len(sentences), batch_size):
@@ -262,6 +278,17 @@ def analyze_book_sentiment(content: str, book_id: str) -> Dict[str, Any]:
     try:
         print(f"Starting sentiment analysis for book {book_id}...")
         
+        # For very large books, sample content before processing
+        if len(content) > 1_000_000:
+            print(f"⚡ Book is very large ({len(content):,} chars), sampling content for faster processing")
+            # Take first 300K, middle 200K, and last 300K characters
+            first_part = content[:300000]
+            middle_start = max(300000, (len(content) - 200000) // 2)
+            middle_part = content[middle_start:middle_start + 200000]
+            last_part = content[-300000:] if len(content) > 300000 else ""
+            content = first_part + "...\n\n[CONTENT SAMPLED FOR PERFORMANCE]...\n\n" + middle_part + "...\n\n[CONTENT SAMPLED FOR PERFORMANCE]...\n\n" + last_part
+            print(f"⚡ Reduced to {len(content):,} chars for analysis")
+        
         # Preprocess tokens for wordcloud
         print("Preprocessing text for wordcloud...")
         tokens = preprocess_text(content)
@@ -295,7 +322,9 @@ def analyze_book_sentiment(content: str, book_id: str) -> Dict[str, Any]:
                 "words": word_data,
                 "word_count": len(word_data),
                 "total_words_analyzed": len(tokens)
-            }
+            },
+            "status": "completed",
+            "message": "Sentiment analysis completed successfully"
         }
         
         print(f"✅ Completed sentiment analysis for book {book_id}")
